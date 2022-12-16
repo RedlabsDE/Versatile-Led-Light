@@ -68,20 +68,38 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ80
 
 /////////////////////////////////////////////////////////////////////////////////////
 // Battery Voltage Measurement
-#define CELL_COUNT 4
-#define VBAT_MV_0_PERCENT 1060 * CELL_COUNT //4.24V
-#define VBAT_MV_5_PERCENT 1130 * CELL_COUNT //4.52V
+#define USE_BATTERY_MEASUREMENT false
 
-#define BAT_U_SENS_PIN  0 //A0
+#if (USE_BATTERY_MEASUREMENT==true)
+  #define CELL_COUNT 4
+  #define VBAT_MV_0_PERCENT 1060 * CELL_COUNT //4.24V
+  #define VBAT_MV_5_PERCENT 1130 * CELL_COUNT //4.52V
+
+  #define BAT_U_SENS_PIN  0 //A0
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////
 // IR Motion Sensor
+#define USE_MOTION_SENSOR false
+
 #define MOTION_SUPPLY_PIN   3 // Motion sensor is attached to GND and two GPIOs, this for supply
 #define MOTION_PIN          2 // Motion sensor status pin 
 #define MOTION_INTERRUPT_CH 0 // Motion sensor interrupt channel 
 
+ #define MOTION_SENSOR_IS_ACTIVE digitalRead(MOTION_PIN) //active high
+
 #define SENSOR_SUPPLY_ENABLE  digitalWrite(MOTION_SUPPLY_PIN, HIGH) //active high
 #define SENSOR_SUPPLY_DISABLE digitalWrite(MOTION_SUPPLY_PIN, LOW) //active high
+
+/////////////////////////////////////////////////////////////////////////////////////
+// User push button
+#define USE_USER_PUSHBUTTON true
+
+#define BUTTON_PRESS_TIME_LONG_MS 800
+#define BUTTON_PRESS_TIME_SHORT_MS 200
+
+#define USER_BUTTON1_PIN 12//TODO
+#define USER_BUTTON1_PRESSED (digitalRead(USER_BUTTON1_PIN)==0) //active low, return true if button is pressed
 
 /////////////////////////////////////////////////////////////////////////////////////
 // DEBUG LED
@@ -104,6 +122,9 @@ void GO_TO_SLEEP(bool enableWakeup); // set mcu to sleep, enable/disable wakup-o
 void checkBattery(); // set battery state: batteryIsEmpty & batteryIsLow
 int CalculateVoltage(int adcValue); // calculate battery voltage in mV from raw ADC
 
+void checkButton();
+
+
 int delayval = 100; //delay between each LED in ms
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -124,12 +145,18 @@ void setup()
   pixels.begin();
   pixels.setBrightness(150);
 
+#if (USE_MOTION_SENSOR==true)
   // Motion Sensor Supply via uC pin
   pinMode(MOTION_SUPPLY_PIN, OUTPUT);
   SENSOR_SUPPLY_ENABLE;
 
   // Motion Sensor
   pinMode(MOTION_PIN, INPUT_PULLUP);
+#endif
+
+#if (USE_USER_PUSHBUTTON == true)
+  pinMode(USER_BUTTON1_PIN, INPUT_PULLUP);
+#endif
 
   // LED supply switch (5V switched via PFET)
   pinMode(SUPPLY_SWITCH_PIN, OUTPUT);
@@ -157,8 +184,10 @@ void loop()
     GO_TO_SLEEP(false);
   }
 
+
+  #if(USE_MOTION_SENSOR == true)
   // Motion is active
-  if (digitalRead(MOTION_PIN))
+  if (MOTION_SENSOR_IS_ACTIVE)
   {
     motionActive = true;
     digitalWrite(ONBOARD_LED_PIN, HIGH);
@@ -185,9 +214,33 @@ void loop()
       // ... continue here on MCU wakeup (motion sensor event)
     }
   }
+  #elif(USE_USER_PUSHBUTTON == true)
+  checkButton();
+
+  #endif
+
+
 
   checkBattery();
   delay(10);
+}
+
+
+
+void checkButton()
+{
+  if(USER_BUTTON1_PRESSED)
+  {
+    //TODO: check for short an long button press
+
+    //long: hold longer than BUTTON_PRESS_TIME_LONG_MS 
+  }
+  else
+  {
+    //short: released after BUTTON_PRESS_TIME_SHORT_MS hold time
+
+    //reset timer
+  }
 }
 
 /************************************************************************************************************************************************/
@@ -315,6 +368,7 @@ void indicateEmptyBattery()
   /************************************************************************************************************************************************/
 void checkBattery()
 {
+#if (USE_BATTERY_MEASUREMENT==true)
   SUPPLY_SWITCH_ENABLE;
   delay(10);
   
@@ -347,6 +401,10 @@ void checkBattery()
     batteryIsEmpty = false;
     batteryIsLow = false;
   }
+#else
+  batteryIsEmpty = false;
+  batteryIsLow = false;
+#endif
 }
 
 /************************************************************************************************************************************************/
