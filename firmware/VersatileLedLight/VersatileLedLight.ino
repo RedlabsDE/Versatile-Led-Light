@@ -39,7 +39,7 @@
 */
 
 //use serial output and onboard LED for debug
-#define DEBUG 0
+#define DEBUG 1
 
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -55,13 +55,13 @@
 #define PIN            8
 
 // How many NeoPixels are attached to the Arduino?
-#define NUMPIXELS      15
+#define NUMPIXELS      3
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 /////////////////////////////////////////////////////////////////////////////////////
 //WS2812 LED Supply switch
-#define SUPPLY_SWITCH_PIN  12
+#define SUPPLY_SWITCH_PIN  9 //12
 
 #define SUPPLY_SWITCH_ENABLE   digitalWrite(SUPPLY_SWITCH_PIN, LOW) //active low
 #define SUPPLY_SWITCH_DISABLE  digitalWrite(SUPPLY_SWITCH_PIN, HIGH) //active low
@@ -96,14 +96,81 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ80
 #define USE_USER_PUSHBUTTON true
 
 #define BUTTON_PRESS_TIME_LONG_MS 800
-#define BUTTON_PRESS_TIME_SHORT_MS 200
+#define BUTTON_PRESS_TIME_SHORT_MS 100
 
-#define USER_BUTTON1_PIN 12//TODO
+#define USER_BUTTON1_PIN 2//TODO
+#define USER_BUTTON1_INTERRUPT_CH 0 // Motion sensor interrupt channel 
+
 #define USER_BUTTON1_PRESSED (digitalRead(USER_BUTTON1_PIN)==0) //active low, return true if button is pressed
 
 /////////////////////////////////////////////////////////////////////////////////////
 // DEBUG LED
 #define ONBOARD_LED_PIN     13 //Arduino Mini onboard LED
+/////////////////////////////////////////////////////////////////////////////////////
+#define TIMER_LED_ON_SEC  60
+/////////////////////////////////////////////////////////////////////////////////////
+
+struct struct_SystemTimerEvent
+{
+  bool timerIsRunning = false;
+  unsigned long startTime = 0; //set to millis() at start
+  unsigned long duration_ms = 0; //set to desired time
+
+  bool timerDonePending = false;
+
+};
+
+enum systemStatus
+{
+  stat_invalid = -1,
+  stat_powerup = 1,
+  stat_go_to_sleep,
+  stat_sleep,
+  stat_wakeup,
+  stat_on
+};
+
+enum ledStatus
+{
+  ledStat_invalid = -1,
+  ledStat_allOff = 0,
+  ledStat_on = 1
+};
+
+struct struct_SystemTime
+{
+  unsigned long now = 0;
+
+  //automatic mode/color change
+  /*
+  unsigned long last_change_color = 0;
+  unsigned long next_change_color = TIMER_MS_AUTO_CHANGE_MIN;
+  unsigned long last_change_mode = 0;
+  unsigned long next_change_mode = TIMER_MS_AUTO_CHANGE_MIN;
+  */
+
+  //Sound to Light
+  //unsigned long Sound_last_trigger = 0; //sound to light trigger
+
+  //Button
+  bool Button_isReleased = false; // a not pressed button will set this true. Used to prevent multiple long-button-press-events.
+  unsigned long Button_PressDuration = 0;
+  unsigned long Button_last_falling_edge = 0;
+  bool Button_Shortpress_event = false;
+  bool Button_Longpress_event = false;
+
+  //Timer
+  struct struct_SystemTimerEvent SystemTimer_LED;
+
+  //Status indication
+  unsigned long status_indication_start = 0;
+
+
+  int8_t systemStatus = stat_invalid;
+  int8_t ledStatus = ledStat_allOff;
+
+} SystemTime;
+
 /////////////////////////////////////////////////////////////////////////////////////
 
 bool motionActive = 0; //state of motion sensor output pin
@@ -123,6 +190,8 @@ void checkBattery(); // set battery state: batteryIsEmpty & batteryIsLow
 int CalculateVoltage(int adcValue); // calculate battery voltage in mV from raw ADC
 
 void checkButton();
+void action_ButtonPressShort();
+void action_ButtonPressLong();
 
 
 int delayval = 100; //delay between each LED in ms
@@ -139,7 +208,12 @@ void setup()
 
   //ONBOARD DEBUG LED
   pinMode(ONBOARD_LED_PIN, OUTPUT);
+  digitalWrite(ONBOARD_LED_PIN, HIGH);
+  
 #endif
+
+
+  SystemTime.systemStatus = stat_powerup;
 
   // This initializes the NeoPixel library.
   pixels.begin();
@@ -156,6 +230,7 @@ void setup()
 
 #if (USE_USER_PUSHBUTTON == true)
   pinMode(USER_BUTTON1_PIN, INPUT_PULLUP);
+  //pinMode(USER_BUTTON1_PIN, INPUT);
 #endif
 
   // LED supply switch (5V switched via PFET)
@@ -171,6 +246,7 @@ void setup()
     fadeUp();
     fadeDown();
   }
+  SystemTime.systemStatus = stat_go_to_sleep;
 }
 
 /************************************************************************************************************************************************/
@@ -178,10 +254,17 @@ void setup()
 /************************************************************************************************************************************************/
 void loop()
 {
+  #if (USE_BATTERY_MEASUREMENT == true)
   if (batteryIsEmpty)
   {
     indicateEmptyBattery();
     GO_TO_SLEEP(false);
+  }
+  #endif
+
+  if(SystemTime.systemStatus == stat_go_to_sleep)
+  {
+    GO_TO_SLEEP(true);
   }
 
 
@@ -220,28 +303,154 @@ void loop()
   #endif
 
 
-
+  checkTimer();
   checkBattery();
   delay(10);
 }
 
+void checkTimer()
+{
+  SystemTime.now = millis();
+
+  if(SystemTime.SystemTimer_LED.timerIsRunning)
+  {
+    if( (SystemTime.SystemTimer_LED.startTime + SystemTime.SystemTimer_LED.duration_ms) < SystemTime.now)
+    {
+      SystemTime.SystemTimer_LED.timerDonePending = true;
+      SystemTime.SystemTimer_LED.timerIsRunning = false;
+    }
+  }
+
+
+  /////
+  if(SystemTime.SystemTimer_LED.timerDonePending == true)
+  {
+    #if DEBUG
+    Serial.write("\n SystemTimer_LED.timerDonePending == true");
+    #endif
+    
+    SystemTime.SystemTimer_LED.timerDonePending = false;
+    fadeDown(); //TODO: fade down slower
+    SystemTime.ledStatus = ledStat_allOff;
+    SystemTime.systemStatus = stat_go_to_sleep;
+  }
+
+}
 
 
 void checkButton()
 {
+  static bool firstEdge = true;
+
   if(USER_BUTTON1_PRESSED)
   {
-    //TODO: check for short an long button press
+    if(firstEdge == true)
+    {
+      SystemTime.Button_last_falling_edge = millis();
+      firstEdge = false;
+    } 
 
-    //long: hold longer than BUTTON_PRESS_TIME_LONG_MS 
+    SystemTime.Button_PressDuration = millis() - SystemTime.Button_last_falling_edge;
+
+    if(SystemTime.Button_PressDuration > BUTTON_PRESS_TIME_LONG_MS && SystemTime.Button_isReleased == true)
+    {
+      SystemTime.systemStatus = stat_on;
+      action_ButtonPressLong();
+      SystemTime.Button_isReleased = false;
+    }
   }
   else
   {
     //short: released after BUTTON_PRESS_TIME_SHORT_MS hold time
+    if(SystemTime.Button_PressDuration > BUTTON_PRESS_TIME_SHORT_MS && SystemTime.Button_isReleased == true)
+    {
+      SystemTime.systemStatus = stat_on;
+      action_ButtonPressShort();
+    }
 
-    //reset timer
+    SystemTime.Button_PressDuration = 0;
+    SystemTime.Button_isReleased = true;
+    firstEdge = true;
+
+    if(SystemTime.systemStatus == stat_wakeup)
+    {
+      SystemTime.systemStatus = stat_go_to_sleep;
+    }
   }
 }
+void action_ButtonPressShort()
+{
+
+  #if DEBUG
+  Serial.write("\n action_ButtonPressShort()");
+  #endif
+
+  if(SystemTime.ledStatus != ledStat_on)
+  {
+    #if DEBUG
+    Serial.write(" - set led on by timer");
+    #endif
+
+    SystemTime.ledStatus = ledStat_on;
+    //set color1
+    fadeUpColor(100,0,0);
+    
+    //start timer to turn off LEDs
+
+
+    SystemTime.SystemTimer_LED.startTime = millis();
+    SystemTime.SystemTimer_LED.duration_ms = (unsigned long) TIMER_LED_ON_SEC*1000;
+    SystemTime.SystemTimer_LED.timerIsRunning = true;
+
+  Serial.write("\n Time start: ");
+  Serial.println(millis());// Gibt die Zeit seit dem Programmstart aus
+  Serial.write("\n duration_ms ");
+  Serial.println(SystemTime.SystemTimer_LED.duration_ms);// Gibt die Zeit seit dem Programmstart aus
+
+  }
+  else if (SystemTime.ledStatus == ledStat_on)
+  {
+    #if DEBUG
+    Serial.write(" - set led off");
+    #endif
+
+    //turn off direct
+    fadeDown();
+    SystemTime.ledStatus = ledStat_allOff;
+    SystemTime.systemStatus = stat_go_to_sleep;
+  }
+
+
+}
+
+void action_ButtonPressLong()
+{
+  #if DEBUG
+  Serial.write("\n action_ButtonPressLong()");
+  #endif
+  if(SystemTime.ledStatus != ledStat_on)
+  {
+    #if DEBUG
+    Serial.write(" - set led on");
+    #endif
+
+    SystemTime.ledStatus = ledStat_on;
+    //set color2
+    fadeUpColor(100,50,0);
+  }
+  else if(SystemTime.ledStatus == ledStat_on)
+  {
+    #if DEBUG
+    Serial.write(" - set led off");
+    #endif
+    //turn off direct
+    fadeDown();
+    SystemTime.ledStatus = ledStat_allOff;
+    SystemTime.systemStatus = stat_go_to_sleep;
+  }
+
+}
+
 
 /************************************************************************************************************************************************/
 /** Set MCU to sleep mode
@@ -250,6 +459,17 @@ void checkButton()
     @return /
 */
 /************************************************************************************************************************************************/
+//dummy function
+/*
+void GO_TO_SLEEP(bool enableWakeup)
+{
+  Serial.write(" go to sleep dummy... ");
+  SUPPLY_SWITCH_DISABLE;
+  SystemTime.systemStatus = stat_sleep;
+}
+*/
+
+//first sleep causes direct wakeup. second sleep works ?!
 void GO_TO_SLEEP(bool enableWakeup)
 {
   #if DEBUG
@@ -269,15 +489,28 @@ void GO_TO_SLEEP(bool enableWakeup)
   
   if (enableWakeup) // normal sleep - use motion sensor to wake up MCU
   {    
-    attachInterrupt(MOTION_INTERRUPT_CH, WAKE_UP, RISING); 
+    #if (USE_MOTION_SENSOR == true)
+      attachInterrupt(MOTION_INTERRUPT_CH, WAKE_UP, RISING); 
+    #endif
+
+    #if (USE_USER_PUSHBUTTON == true)
+      //pinMode(USER_BUTTON1_PIN, INPUT_PULLUP);
+      attachInterrupt(USER_BUTTON1_INTERRUPT_CH, WAKE_UP, FALLING); //sollte falling sein
+
+    #endif 
   }
   else // sleep because battery is empty - no option to wake up again, disable motion sensor
   {
-    detachInterrupt(MOTION_INTERRUPT_CH); // motion sensor will not trigger an interrupt to wake up MCU
-    SENSOR_SUPPLY_DISABLE; // motion sensor is not used, disable sensor supply
+    #if (USE_MOTION_SENSOR == true)
+      detachInterrupt(MOTION_INTERRUPT_CH); // motion sensor will not trigger an interrupt to wake up MCU
+      SENSOR_SUPPLY_DISABLE; // motion sensor is not used, disable sensor supply
+    #endif
   }
   
+  //SystemTime.systemStatus = stat_sleep;
+  SystemTime.systemStatus = stat_go_to_sleep;
   delay(10); // important delay!
+
   set_sleep_mode(SLEEP_MODE_PWR_DOWN); //set full sleep mode
   sleep_cpu(); // got to sleep ...
 }
@@ -290,8 +523,22 @@ void GO_TO_SLEEP(bool enableWakeup)
 /************************************************************************************************************************************************/
 void WAKE_UP()
 {
+
+  //TODO: reset wakeup by interrupt??
+  //EIFR = (1<<INTF0); 
+
   sleep_disable();
-  detachInterrupt(MOTION_INTERRUPT_CH);
+
+  #if (USE_MOTION_SENSOR == true)
+    detachInterrupt(MOTION_INTERRUPT_CH);
+  #endif
+
+  #if (USE_USER_PUSHBUTTON == true)
+    detachInterrupt(USER_BUTTON1_INTERRUPT_CH);
+  #endif 
+
+  SystemTime.systemStatus = stat_wakeup;
+  //SystemTime.systemStatus = stat_go_to_sleep;
 
   SUPPLY_SWITCH_ENABLE;
   delay(50);
@@ -323,6 +570,17 @@ void fadeUp()
       pixels.setPixelColor(i, pixels.Color(100, 50, 0)); // Set LEDs orange
     }
 
+    pixels.show(); // This sends the updated pixel color to the hardware.
+    delay(delayval); // Delay for a period of time (in milliseconds).
+  }
+}
+
+
+void fadeUpColor(uint8_t r, uint8_t g, uint8_t b)
+{
+  for (int i = 0; i < NUMPIXELS; i++)
+  {
+    pixels.setPixelColor(i, pixels.Color(r, g, b)); // Set LEDs red
     pixels.show(); // This sends the updated pixel color to the hardware.
     delay(delayval); // Delay for a period of time (in milliseconds).
   }
