@@ -55,7 +55,7 @@
 #define PIN            8
 
 // How many NeoPixels are attached to the Arduino?
-#define NUMPIXELS      3
+#define NUMPIXELS      144
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
@@ -194,7 +194,7 @@ void action_ButtonPressShort();
 void action_ButtonPressLong();
 
 
-int delayval = 100; //delay between each LED in ms
+int delayval = 5; //delay between each LED in ms
 
 /////////////////////////////////////////////////////////////////////////////////////
 /************************************************************************************************************************************************/
@@ -204,7 +204,7 @@ void setup()
 {
 #if DEBUG
   Serial.begin(115200);
-  Serial.write("Redlabs Motion Light - initial version");
+  Serial.write("Redlabs Versatile Led Light - nightlight");
 
   //ONBOARD DEBUG LED
   pinMode(ONBOARD_LED_PIN, OUTPUT);
@@ -217,7 +217,7 @@ void setup()
 
   // This initializes the NeoPixel library.
   pixels.begin();
-  pixels.setBrightness(150);
+  pixels.setBrightness(50);
 
 #if (USE_MOTION_SENSOR==true)
   // Motion Sensor Supply via uC pin
@@ -243,7 +243,7 @@ void setup()
   
   if(!batteryIsEmpty)
   {
-    fadeUp();
+    fadeUpColor(250,50,0);
     fadeDown();
   }
   SystemTime.systemStatus = stat_go_to_sleep;
@@ -396,8 +396,6 @@ void action_ButtonPressShort()
     fadeUpColor(100,0,0);
     
     //start timer to turn off LEDs
-
-
     SystemTime.SystemTimer_LED.startTime = millis();
     SystemTime.SystemTimer_LED.duration_ms = (unsigned long) TIMER_LED_ON_SEC*1000;
     SystemTime.SystemTimer_LED.timerIsRunning = true;
@@ -414,13 +412,12 @@ void action_ButtonPressShort()
     Serial.write(" - set led off");
     #endif
 
+    SystemTime.SystemTimer_LED.timerIsRunning = false;
     //turn off direct
     fadeDown();
     SystemTime.ledStatus = ledStat_allOff;
     SystemTime.systemStatus = stat_go_to_sleep;
   }
-
-
 }
 
 void action_ButtonPressLong()
@@ -436,13 +433,14 @@ void action_ButtonPressLong()
 
     SystemTime.ledStatus = ledStat_on;
     //set color2
-    fadeUpColor(100,50,0);
+    fadeUpColor(250,50,0);
   }
   else if(SystemTime.ledStatus == ledStat_on)
   {
     #if DEBUG
     Serial.write(" - set led off");
     #endif
+    SystemTime.SystemTimer_LED.timerIsRunning = false;
     //turn off direct
     fadeDown();
     SystemTime.ledStatus = ledStat_allOff;
@@ -557,6 +555,7 @@ void WAKE_UP()
     call on rising edge of motion sensor
 */
 /************************************************************************************************************************************************/
+//fade up by turning on one led after each other
 void fadeUp()
 {
   for (int i = 0; i < NUMPIXELS; i++)
@@ -567,7 +566,7 @@ void fadeUp()
     }
     else
     {
-      pixels.setPixelColor(i, pixels.Color(100, 50, 0)); // Set LEDs orange
+      pixels.setPixelColor(i, pixels.Color(250, 50, 0)); // Set LEDs orange
     }
 
     pixels.show(); // This sends the updated pixel color to the hardware.
@@ -575,8 +574,42 @@ void fadeUp()
   }
 }
 
-
+//fade up all leds at the same time
 void fadeUpColor(uint8_t r, uint8_t g, uint8_t b)
+{
+  uint8_t red = 0;
+  uint8_t green = 0;
+  uint8_t blue = 0;
+  for(int i=0; i<=255; i++)
+  {
+    red = r;
+    green = g;
+    blue = b;
+    if(i<r)
+    {
+      red = i;
+    }
+    if(i<g)
+    {
+      green = i;
+    }
+    if(i<b)
+    {
+      blue = i;
+    }
+
+    for (int p = 0; p < NUMPIXELS; p++)
+    {
+      pixels.setPixelColor(p, pixels.Color(red, green, blue)); // Set LEDs red
+    }
+
+    pixels.show(); // This sends the updated pixel color to the hardware.
+    delay(delayval); // Delay for a period of time (in milliseconds).
+  }
+}
+
+//fade up by turning on one led after each other
+void fadeUpColor2(uint8_t r, uint8_t g, uint8_t b)
 {
   for (int i = 0; i < NUMPIXELS; i++)
   {
@@ -585,6 +618,7 @@ void fadeUpColor(uint8_t r, uint8_t g, uint8_t b)
     delay(delayval); // Delay for a period of time (in milliseconds).
   }
 }
+
 
 /************************************************************************************************************************************************/
 /** Dim down LEDs and disable LED supply
