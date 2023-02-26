@@ -108,7 +108,10 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ80
 // DEBUG LED
 #define ONBOARD_LED_PIN     13 //Arduino Mini onboard LED
 /////////////////////////////////////////////////////////////////////////////////////
+// AUTO-OFF Timer
+#define AUTO_OFF_TIMER_ENABLED false
 #define TIMER_LED_ON_SEC  60
+
 /////////////////////////////////////////////////////////////////////////////////////
 
 struct struct_SystemTimerEvent
@@ -395,9 +398,10 @@ void action_ButtonPressShort()
     SystemTime.ledStatus = ledStat_on;
     //set color1
     fadeUpColor(100,0,0);
+
+    #if AUTO_OFF_TIMER_ENABLED
+    //start timer to turn off LEDs
     
-    //start timer to turn off LEDs - disabled
-    /*
     SystemTime.SystemTimer_LED.startTime = millis();
     SystemTime.SystemTimer_LED.duration_ms = (unsigned long) TIMER_LED_ON_SEC*1000;
     SystemTime.SystemTimer_LED.timerIsRunning = true;
@@ -406,7 +410,8 @@ void action_ButtonPressShort()
     Serial.println(millis());// Gibt die Zeit seit dem Programmstart aus
     Serial.write("\n duration_ms ");
     Serial.println(SystemTime.SystemTimer_LED.duration_ms);// Gibt die Zeit seit dem Programmstart aus
-  */
+    #endif
+  
 
   }
   else if (SystemTime.ledStatus == ledStat_on)
