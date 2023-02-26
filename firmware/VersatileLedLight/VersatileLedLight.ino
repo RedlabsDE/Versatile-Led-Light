@@ -5,8 +5,9 @@
     Author: Julian
 
   History:
-  15.08.2020 initial version of battery powered Motion Light
-  16.12.2022 move to git
+  15.08.2020 initial version of battery powered Motion Light (Tag 1.0)
+  16.12.2022 move to git 
+  26.02.2023 disable auto-off timer (Tag 2.1)
 */
 
 /*
@@ -395,15 +396,17 @@ void action_ButtonPressShort()
     //set color1
     fadeUpColor(100,0,0);
     
-    //start timer to turn off LEDs
+    //start timer to turn off LEDs - disabled
+    /*
     SystemTime.SystemTimer_LED.startTime = millis();
     SystemTime.SystemTimer_LED.duration_ms = (unsigned long) TIMER_LED_ON_SEC*1000;
     SystemTime.SystemTimer_LED.timerIsRunning = true;
 
-  Serial.write("\n Time start: ");
-  Serial.println(millis());// Gibt die Zeit seit dem Programmstart aus
-  Serial.write("\n duration_ms ");
-  Serial.println(SystemTime.SystemTimer_LED.duration_ms);// Gibt die Zeit seit dem Programmstart aus
+    Serial.write("\n Time start: ");
+    Serial.println(millis());// Gibt die Zeit seit dem Programmstart aus
+    Serial.write("\n duration_ms ");
+    Serial.println(SystemTime.SystemTimer_LED.duration_ms);// Gibt die Zeit seit dem Programmstart aus
+  */
 
   }
   else if (SystemTime.ledStatus == ledStat_on)
