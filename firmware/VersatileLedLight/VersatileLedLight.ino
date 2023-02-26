@@ -7,11 +7,12 @@
   History:
   15.08.2020 initial version of battery powered Motion Light (Tag 1.0)
   16.12.2022 move to git 
+  17.12.2022 restructure to button-controlled light (Tag 2.0)
   26.02.2023 disable auto-off timer (Tag 2.1)
 */
 
 /*
-  Description of hardware connection and firmware function - initial version of battery powered Motion Light
+  Description of hardware connection and firmware function - initial version of battery powered Motion Light (Tag 1.0)
 
   Board: Arduino Mini (without USB)
   Arduino IO Setting:
