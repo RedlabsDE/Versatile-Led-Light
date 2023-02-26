@@ -9,7 +9,7 @@ arduino project for multiple lightning purposes like motion light, night light w
 | Leds On  | motion detected | re-start timer  |
 | Leds On  | timer expired  | fade down and turn off LEDs  |
 
-## Tag 2.0 - Dim and smooth night light controlled by button
+## Tag 2.0 - Dim and smooth night light controlled by button and timer
 | State  | Event  | Task  |
 |---|---|---|
 | Leds Off  | short button press  | fade up color 1  + start timer "auto-off"|
